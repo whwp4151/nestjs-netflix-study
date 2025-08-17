@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional } from "class-validator";
+import { ArrayNotEmpty, IsArray, IsNotEmpty, IsNumber, IsOptional } from "class-validator";
 
 export class UpdateMovieDto {
     @IsNotEmpty()
@@ -7,13 +7,17 @@ export class UpdateMovieDto {
 
     @IsNotEmpty()
     @IsOptional()
-    genre?: string;
-
-    @IsNotEmpty()
-    @IsOptional()
     detail?: string;
 
     @IsNotEmpty()
     @IsOptional()
     directorId?: number;
+
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsNumber({}, {
+        each: true,
+    })
+    @IsOptional()
+    genreIds?: number[];
 }
