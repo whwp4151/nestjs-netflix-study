@@ -23,27 +23,44 @@ export class MovieService {
   ) { }
 
   async findAll(title?: string) {
-    if (!title) {
-      return await this.movieRepository.findAndCount({
-        relations: ['director', 'genres'],
-      });
+    const qd = await this.movieRepository.createQueryBuilder('movie')
+      .leftJoinAndSelect('movie.director', 'director')
+      .leftJoinAndSelect('movie.genres', 'genres');
+
+    if (title) {
+      qd.where('movie.title LIKE :title', {title: `%${title}%`});
     }
 
-    return await this.movieRepository.findAndCount({
-      where: {
-        title: Like(`%${title}%`),
-      },
-      relations: ['director', 'genres'],
-    });
+    // if (!title) {
+    //   return await this.movieRepository.findAndCount({
+    //     relations: ['director', 'genres'],
+    //   });
+    // }
+
+    // return await this.movieRepository.findAndCount({
+    //   where: {
+    //     title: Like(`%${title}%`),
+    //   },
+    //   relations: ['director', 'genres'],
+    // });
+
+    return qd.getManyAndCount();
   }
 
   async findOne(id: number) {
-    const movie = await this.movieRepository.findOne({
-      where: {
-        id
-      },
-      relations: ['detail', 'director', 'genre'],
-    });
+    const movie = await this.movieRepository.createQueryBuilder('movie')
+      .leftJoinAndSelect('movie.director', 'director')
+      .leftJoinAndSelect('movie.genres', 'genres')
+      .leftJoinAndSelect('movie.detail', 'detail')
+      .where('movie.id = :id', {id})
+      .getOne();
+
+    // const movie = await this.movieRepository.findOne({
+    //   where: {
+    //     id
+    //   },
+    //   relations: ['detail', 'director', 'genre'],
+    // });
 
     if (!movie) {
       throw new NotFoundException('movie not found');
@@ -53,6 +70,7 @@ export class MovieService {
   }
 
   async create(createMovieDto: CreateMovieDto) {
+    // validation
     const director = await this.directorRepository.findOne({
       where: {
         id: createMovieDto.directorId,
@@ -73,24 +91,59 @@ export class MovieService {
       throw new NotFoundException(`genre not found find Ids :: ${genres.map(genre => genre.id).join(',')}`);
     }
 
-    const movie = await this.movieRepository.save({
-      title: createMovieDto.title,
-      detail: {
+    // save
+    const movieDetail = await this.movieDetailRepository.createQueryBuilder()
+      .insert()
+      .into(MovieDetail)
+      .values({
         detail: createMovieDto.detail,
-      },
-      director,
-      genres,
-    });
+      })
+      .execute();
 
-    return movie;
+    const movieDetailId = movieDetail.identifiers[0].id;
+
+    const movie = await this.movieRepository.createQueryBuilder()
+      .insert()
+      .into(Movie)
+      .values({
+        title: createMovieDto.title,
+        detail: {
+          id: movieDetailId
+        },
+        director,
+      })
+      .execute();
+
+    const movieId = movie.identifiers[0].id;
+
+    await this.movieRepository.createQueryBuilder()
+    .relation(Movie, 'genres')
+    .of(movieId)
+    .add(genres.map(genre => genre.id));
+
+    // const movie = await this.movieRepository.save({
+    //   title: createMovieDto.title,
+    //   detail: {
+    //     detail: createMovieDto.detail,
+    //   },
+    //   director,
+    //   genres,
+    // });
+
+    return await this.movieRepository.findOne({
+      where: {
+        id: movieId,
+      }
+    });
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
+    // validation
     const movie = await this.movieRepository.findOne({
       where: {
         id
       },
-      relations: ['detail'],
+      relations: ['detail', 'genres'],
     });
 
     if (!movie) {
@@ -136,20 +189,43 @@ export class MovieService {
       ...(newDirector && {director : newDirector})
     };
 
-    await this.movieRepository.update(
-      { id },
-      movieUpdateField,
-    );
+    //update
+    await this.movieRepository.createQueryBuilder()
+      .update(Movie)
+      .set(movieUpdateField)
+      .where('id = :id', {id})
+      .execute();
+
+    // await this.movieRepository.update(
+    //   { id },
+    //   movieUpdateField,
+    // );
 
     if (detail) {
-      await this.movieDetailRepository.update(
-        {
-          id: movie.detail.id,
-        },
-        {
+      await this.movieDetailRepository.createQueryBuilder()
+        .update(MovieDetail)
+        .set({
           detail: detail,
-        }
-      )
+        })
+        .where('id = :id', { id: movie.detail.id })
+        .execute();
+      
+
+      // await this.movieDetailRepository.update(
+      //   {
+      //     id: movie.detail.id,
+      //   },
+      //   {
+      //     detail: detail,
+      //   }
+      // )
+    }
+
+    if (newGenres) {
+      await this.movieRepository.createQueryBuilder()
+        .relation(Movie, 'genres')
+        .of(id)
+        .addAndRemove(newGenres.map(genre => genre.id), movie.genres.map(genre => genre.id));
     }
 
     const newMovie = await this.movieRepository.findOne({
@@ -193,7 +269,12 @@ export class MovieService {
       throw new NotFoundException('movie not found');
     }
 
-    await this.movieRepository.delete(id);
+    await this.movieRepository.createQueryBuilder()
+      .delete()
+      .where('id = :id', {id})
+      .execute();
+
+    // await this.movieRepository.delete(id);
     await this.movieDetailRepository.delete(movie.detail.id);
 
     return id;
