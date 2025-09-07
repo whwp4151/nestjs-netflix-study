@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/user/entity/user.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
@@ -12,6 +13,7 @@ export class AuthService {
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
         private readonly configService: ConfigService,
+        private readonly jwtService: JwtService,
     ) {}
 
     parseBasicToken(rawToken: string) {
@@ -64,6 +66,52 @@ export class AuthService {
                 email,
             }
         })
+    }
+
+    async authenticate(email: string, password: string) {
+        const user = await this.userRepository.findOne({
+            where: {
+                email,
+            }
+        });
+
+        if (!user) {
+            throw new BadRequestException('로그인 정보가 잘못됐습니다');
+        }
+
+        const passOk = await bcrypt.compare(password, user.password);
+
+        if (!passOk) {
+            throw new BadRequestException('로그인 정보가 잘못됐습니다.');
+        }
+
+        return user;
+    }
+
+    async issueToken(user: User, isRefresh: boolean) {
+
+        const refreshTokenSecret = this.configService.get<string>('REFRESH_TOKEN_SECRET');
+        const accessTokenSecret = this.configService.get<string>('ACCESS_TOKEN_SECRET');
+
+        return await this.jwtService.signAsync({
+                sub: user.id,
+                role: user.role,
+                type: isRefresh ? 'refresh' : 'access',
+            }, {
+                secret: isRefresh ? refreshTokenSecret : accessTokenSecret,
+                expiresIn: isRefresh ? '24h' : 300,
+            });
+    }
+
+    async login(rawToken: string) {
+        const {email, password} = this.parseBasicToken(rawToken);
+
+        const user = await this.authenticate(email, password);
+
+        return {
+            refreshToken: await this.issueToken(user, true),
+            accessToken: await this.issueToken(user, false),
+        };
     }
  
 }
