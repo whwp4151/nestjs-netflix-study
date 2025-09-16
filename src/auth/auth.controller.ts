@@ -2,7 +2,6 @@ import { Controller, Post, Headers, UseInterceptors, ClassSerializerInterceptor,
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './strategy/local.strategy';
 import { JwtAuthGuard } from './strategy/jwt.strategy';
-import { access } from 'fs';
 
 @Controller('auth')
 @UseInterceptors(ClassSerializerInterceptor)
@@ -20,11 +19,9 @@ export class AuthController {
   }
 
   @Post("/token/access")
-  async rotateAccessToken(@Headers('authorization') token: string) {
-    const payload = await this.authService.parseBearerToken(token, true);
-
+  async rotateAccessToken(@Request() req: any) {
     return {
-      accessToken: await this.authService.issueToken(payload, false),
+      accessToken: await this.authService.issueToken(req.user, false),
     }
   }
 

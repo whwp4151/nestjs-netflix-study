@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, ClassSerializerInterceptor, ParseIntPipe } from '@nestjs/common';
+import { Controller, Request, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors, ClassSerializerInterceptor, ParseIntPipe } from '@nestjs/common';
 import { MovieService } from './movie.service';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
@@ -11,8 +11,10 @@ export class MovieController {
 
   @Get()
   getMovies(
+    @Request() req: any,
     @Query('title', MovieTitleValidationPipe) title?: string,
   ) {
+    console.log(req.user)
     return this.movieService.findAll(title);
   }
 
